@@ -1,0 +1,434 @@
+---
+title: "Analyse des prix des denrées sur les marchés Togolais (2026)"
+author: "KAGNIRA Bihèbè"
+date: "`r format(Sys.Date(), '%d %B %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 2
+    theme: cosmo
+    df_print: paged
+---
+
+```{r setup}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE
+)
+
+library(tidyverse)
+library(janitor)
+library(scales)
+library(readxl)
+```
+
+# 1. Contexte du projet
+
+Ce rapport présente une analyse exploratoire des prix moyens des denrées alimentaires observés sur les marchés Togolais en Novembre 2025 à Mars 2026, à partir des données collectées par la Direction de la Planification, des Statitisques Agricoles et Suivi - Evaluation (DPSSE). L’objectif est de décrire les niveaux de prix par produit, région, préfecture et type de marché, d’identifier les produits et zones les plus exposés à des prix élevés, et de documenter les écarts susceptibles d’avoir un impact sur la sécurité alimentaire des ménages.
+
+# 2. Description des données
+
+```{r Description}
+# Chargement des données:
+ prix_marche2 <- read_excel("C:/Users/LENOVO/Desktop/HAINGA/donnees/donneescrees/prix_marché_Nov_Mars.xlsx")
+
+# Vérification rapide de la structure
+glimpse(prix_marche2)
+summary(prix_marche2$prix_moy)
+```
+La base contient 20 948 enregistrements de prix moyens collectés sur les marchés du Togo en 2026, chaque ligne correspondant à un couple marché–produit–mois pour un prix de détail exprimé en FCFA par kilogramme. Les variables couvrent le pays, la région, la préfecture, le type de marché, le marché, le produit, le mois, l’année, la devise et le type de prix, ce qui permet une analyse détaillée des niveaux de prix dans l’espace et dans le temps.
+
+La distribution est fortement asymétrique à droite, avec une médiane autour de 600 FCFA/kg et une moyenne plus élevée (~966 FCFA/kg), ce qui reflète la coexistence de produits de base peu chers et de produits à forte valeur ajoutée. Les valeurs très élevées doivent toutefois être examinées au cas par cas, pour distinguer les produits réellement chers (comme certains produits transformés ou de niche) d’éventuelles erreurs de saisie.
+
+# 3. Nettoyage minimal et vérifications
+
+```{r Nettoyage}
+prix_marche <- prix_marche2 %>%
+  clean_names() %>%
+  mutate(
+    mois = factor(
+      mois,
+      levels = c("Novembre", "Décembre", "Janvier", "Février", "Mars")
+    ),
+    regions = as.factor(regions),
+    types_de_marches = as.factor(types_de_marches),
+    produits = as.factor(produits)
+  )
+
+# Vérification des colonnes
+colnames(prix_marche)
+
+# Vérification des NA
+prix_marche %>%
+  summarise(across(everything(), ~sum(is.na(.))))
+
+# Détection de doublons
+prix_marche %>% 
+  get_dupes(marches, produits, mois, annee)
+
+# Garder la première ligne des doublons
+prix_marche <- prix_marche %>%
+  group_by(marches, produits, mois, annee) %>%
+  summarise(
+    prix_moy = mean(prix_moy),
+    regions = first(regions),
+    types_de_marches = first(types_de_marches),
+    prefectures = first(prefectures),
+    .groups = "drop"
+  )
+
+# reverifier à nouveau 
+prix_marche %>%
+  janitor::get_dupes(marches, produits, mois, annee)
+
+# Vérification des unités
+table(prix_marche$uninte)
+```
+
+```{r Verification}
+summary(prix_marche$prix_moy)
+
+# Valeurs suspectes
+prix_marche %>% filter(prix_moy <= 0)
+
+# Valeurs extrêmes
+prix_marche %>%
+  filter(prix_moy > 10000) %>%
+  select(produits, regions, prix_moy) %>%
+  arrange(desc(prix_moy))
+
+# Quantiles détaillés
+quantile(prix_marche$prix_moy, probs = c(0.01, 0.05, 0.5, 0.95, 0.99))
+
+# Distribution visuelle
+ggplot(prix_marche, aes(y = prix_moy)) +
+  geom_boxplot()
+```
+
+Les noms de variables ont été standardisés en minuscules avec des underscores, et plusieurs variables clés (mois, régions, types de marchés, produits) ont été converties en facteurs pour faciliter les agrégations et les visualisations. Aucune valeur manquante n’est détectée dans les colonnes de localisation et de période, et les contrôles montrent l’absence de prix nuls ou négatifs, ce qui renforce la fiabilité de l’analyse descriptive. Les quelques valeurs extrêmes identifiées concernent notamment le fonio dans le Grand Lomé, dont le niveau de prix très élevé est cohérent avec un produit spécifique à forte valeur et non avec une erreur évidente.
+
+Les doublons identifiés pour certaines combinaisons marché–produit–mois–année correspondent à plusieurs observations de prix pour une même situation. Afin de conserver toute l’information disponible tout en évitant une surreprésentation de ces cas, les valeurs ont été agrégées en calculant le prix moyen pour chaque combinaison. Ce choix revient à considérer que ces observations reflètent des relevés multiples d’un même phénomène, et permet d’obtenir une estimation plus robuste du niveau de prix.
+
+
+#  4. Vue d’ensemble des prix
+## 4.1 Distribution générale des prix
+
+```{r Distribution}
+ggplot(prix_marche, aes(x = prix_moy)) +
+  geom_histogram(binwidth = 100, fill = "#2c7fb8", color = "white") +
+  scale_x_continuous(labels = comma) +
+  labs(
+    title = "Distribution des prix moyens (FCFA/kg)",
+    x = "Prix moyen (FCFA/kg)",
+    y = "Nombre d'observations"
+  )
+```
+
+La distribution des prix moyens est très étalée : la majorité des observations se situe entre environ 200 et 1 200 FCFA/kg, mais une fraction non négligeable dépasse 3 000 FCFA/kg. La moyenne est nettement supérieure à la médiane, ce qui confirme une asymétrie vers le haut liée à quelques produits très chers qui tirent la distribution.
+
+## 4.2 Produits les plus chers et les moins chers
+
+```{r pluschers}
+top_produits <- prix_marche %>%
+  group_by(produits) %>%
+  summarise(
+    prix_moy_national = mean(prix_moy, na.rm = TRUE),
+    n_obs = n()
+  ) %>%
+  ungroup() %>%
+  arrange(desc(prix_moy_national))
+
+# Top 10 des produits les plus chers
+head(top_produits, 10)
+
+# Top 10 des produits les moins chers
+tail(top_produits, 10)
+```
+
+Les produits les plus chers sont principalement des protéines animales (pintade, viandes de chèvre, mouton et bœuf) et des produits à forte valeur ajoutée comme le miel, les œufs de pintade et certains poissons fumés ou séchés. À l’inverse, les produits les moins chers sont surtout des produits de base (maïs blanc et jaune, sorgho, riz paddy, manioc frais, soja, ananas et agrumes) qui constituent l’essentiel du panier alimentaire courant des ménages.
+
+# 4.3 Variabilité des prix par produit
+
+```{r Variabilite}
+variabilite_produits <- prix_marche %>%
+  group_by(produits) %>%
+  summarise(
+    moyenne = mean(prix_moy),
+    sd = sd(prix_moy),
+    cv = sd(prix_moy) / moyenne
+  ) %>%
+  arrange(desc(cv))
+```
+
+#  5. Analyse géographique
+## 5.1 Prix moyens par région
+
+```{r mediane}
+mediane_nationale <- median(prix_marche$prix_moy, na.rm = TRUE)
+```
+
+```{r prixmoy/rég}
+prix_region <- prix_marche %>%
+  group_by(regions) %>%
+  summarise(
+    prix_moy_region = mean(prix_moy, na.rm = TRUE),
+    n_obs = n()
+  ) %>%
+  arrange(desc(prix_moy_region))
+```
+
+
+```{r ecart_region}
+ecart_region <- prix_marche %>%
+  group_by(regions) %>%
+  summarise(
+    prix_median_region = median(prix_moy, na.rm = TRUE)
+  ) %>%
+  mutate(
+    ecart_pct = (prix_median_region - mediane_nationale) /
+                mediane_nationale * 100
+  ) %>%
+  arrange(desc(ecart_pct))
+```
+
+```{r graph/ecart}
+ggplot(ecart_region, aes(
+  x = reorder(regions, ecart_pct),
+  y = ecart_pct
+)) +
+  geom_col(fill = "#2c7fb8") +
+  coord_flip() +
+  scale_y_continuous(labels = function(x) paste0(round(x, 1), "%")) +
+  labs(
+    title = "Écart relatif des prix par région",
+    x = "Région",
+    y = "Écart (%) par rapport à la médiane nationale"
+  )
+```
+  
+
+```{r graph/prixmoy}
+ggplot(prix_region, aes(
+  x = reorder(regions, prix_moy_region),
+  y = prix_moy_region
+)) +
+  geom_col(fill = "#41ab5d") +
+  coord_flip() +
+  scale_y_continuous(labels = scales::comma) +
+  labs(
+    title = "Prix moyen par région (FCFA/kg)",
+    x = "Région",
+    y = "Prix moyen (FCFA/kg)"
+  )
+```
+
+Les prix moyens les plus élevés sont observés dans la région du Grand Lomé (environ 1 200 FCFA/kg), suivie de la région Maritime, ce qui reflète probablement le rôle urbain de la capitale et une demande plus forte pour certains produits. Les régions de l’intérieur (Centrale, Plateaux, Kara, Savanes) présentent des niveaux de prix légèrement plus faibles et relativement proches, ce qui suggère une plus grande homogénéité des marchés intérieurs et un lien plus direct avec les zones de production. Les écarts relatifs par rapport à la médiane nationale restent toutefois modérés, ce qui indique l’existence d’un marché national partiellement intégré.
+
+## 5.2 Prix d’un produit clé par région
+
+```{r produit/clé}
+# Le maïs étant un aliment de base de tous les Togolais
+produit_cible <- "MAIS BLANC"  
+
+prix_maïs_region <- prix_marche %>%
+  filter(str_detect(toupper(produits), produit_cible)) %>%
+  group_by(regions) %>%
+  summarise(
+    prix_moy_region = median(prix_moy),
+    n_obs = n()
+  ) %>%
+  arrange(desc(prix_moy_region))
+
+prix_maïs_region
+
+ggplot(prix_maïs_region, aes(x = reorder(regions, prix_moy_region), y = prix_moy_region)) +
+  geom_col(fill = "#ff7f00") +
+  coord_flip() +
+  scale_y_continuous(labels = comma) +
+  labs(
+    title = paste("Prix moyen du", produit_cible, "par région (FCFA/kg)"),
+    x = "Région",
+    y = "Prix moyen (FCFA/kg)"
+  )
+```
+
+```{r comparaison}
+prix_marche %>%
+  filter(produits == "MAIS BLANC") %>%
+  group_by(types_de_marches) %>%
+  summarise(prix = mean(prix_moy))
+```
+
+Pour le maïs blanc, produit de base, les prix les plus élevés se trouvent également dans le Grand Lomé (environ 190–200 FCFA/kg), alors que les régions plus rurales comme les Plateaux, la Centrale, la Kara et les Savanes affichent des niveaux légèrement plus bas. Cet écart, combiné au fait que les marchés de consommation pratiquent en moyenne des prix plus élevés que les marchés de production, suggère un effet conjoint des coûts de transport, de la demande urbaine et des marges commerciales le long de la chaîne de commercialisation.
+
+#  6. Effet du type de marché
+## 6.1 Boxplots par type de marché
+
+```{r Typemarche}
+ggplot(prix_marche, aes(x = types_de_marches, y = prix_moy)) +
+  geom_boxplot(fill = "#756bb1") +
+  scale_y_continuous(labels = comma) +
+  labs(
+    title = "Distribution des prix moyens par type de marché",
+    x = "Type de marché",
+    y = "Prix moyen (FCFA/kg)"
+  )
+```
+
+Les boxplots montrent que les marchés de consommation pratiquent, en moyenne, des prix plus élevés et plus dispersés que les marchés de production. Les marchés de regroupement se situent dans une position intermédiaire, ce qui est cohérent avec leur rôle de zones de transit et de concentration avant redistribution vers d’autres marchés. Cette hiérarchie est retrouvée pour plusieurs produits, ce qui renforce l’idée de marges commerciales plus fortes au niveau des marchés de détail.
+
+## 6.2 Focus sur quelques produits de base
+
+```{r produitsbases}
+produits_cibles <- c("MAIS BLANC", "RIZ DE GRANDE CONSOMMATION", "IGNAMES") 
+
+prix_base <- prix_marche %>%
+  filter(str_detect(toupper(produits), str_c(produits_cibles, collapse = "|")))
+
+ggplot(prix_base, aes(x = types_de_marches, y = prix_moy, fill = types_de_marches)) +
+  geom_boxplot() +
+  facet_wrap(~ produits, scales = "free_y") +
+  scale_y_continuous(labels = comma) +
+  theme(legend.position = "none") +
+  labs(
+    title = "Prix des produits de base par type de marché",
+    x = "Type de marché",
+    y = "Prix moyen (FCFA/kg)"
+  )
+```
+
+Pour les produits de base comme le maïs blanc, le riz de grande consommation et les ignames, les prix sont systématiquement plus élevés sur les marchés de consommation que sur les marchés de production. Cela confirme l’existence de marges entre producteurs et détaillants et met en évidence des différentiels de prix susceptibles de peser davantage sur le pouvoir d’achat des ménages urbains, particulièrement en période de hausse générale des prix.
+
+# 7. Variation temporelle
+
+```{r variationmensuelle}
+prix_mensuel <- prix_marche %>%
+  group_by(mois, produits) %>%
+  summarise(
+    prix_moy_mois = mean(prix_moy, na.rm = TRUE),
+    n_obs = n()
+  ) %>%
+  ungroup()
+
+prix_mensuel %>%
+  filter(produits %in% unique(prix_base$produits)) %>%
+  ggplot(aes(x = mois, y = prix_moy_mois, group = produits, color = produits)) +
+  geom_line() +
+  geom_point() +
+  scale_y_continuous(labels = comma) +
+  labs(
+    title = "Évolution mensuelle des prix moyens par produit sélectionné",
+    x = "Mois",
+    y = "Prix moyen (FCFA/kg)"
+  )
+```
+
+Sur la période analysée (novembre à mars), on observe des variations mensuelles de prix qui restent modérées pour certains produits et plus marquées pour d’autres, en fonction des saisons de récolte et des conditions d’approvisionnement. Pour les produits de base, les hausses entre certains mois peuvent signaler des tensions ponctuelles sur l’offre ou des effets saisonniers spécifiques, ce qui justifie un suivi régulier pour anticiper d’éventuelles difficultés d’accès aux denrées.
+
+# 8. Piste de modèle simple
+
+```{r modele}
+modele_prix <- lm(
+  log(prix_moy) ~ produits + regions + types_de_marches + mois,
+  data = prix_marche
+)
+```
+
+```{r modele/sansproduit}
+modele_sans_produit <- lm(
+  log(prix_moy) ~ regions + types_de_marches + mois,
+  data = prix_marche
+)
+```
+
+
+```{r summ}
+summary(modele_prix)
+summary(modele_sans_produit)
+```
+
+## 8.1 Prédictions du modèle
+
+```{r prediction}
+# Prédictions sur l'échantillon utilisé pour estimer le modèle
+pred_log <- predict(modele_prix)          # prédiction de log(prix_moy)
+pred_prix <- exp(pred_log)                # prédiction du prix moyen (FCFA/kg)
+
+#
+prix_marche <- prix_marche %>%
+  mutate(
+    pred_log_prix = pred_log,
+    pred_prix = pred_prix
+  )
+
+# comparaison du prix observé et le prix prédit pour quelques lignes
+prix_marche %>%
+  select(produits, regions, types_de_marches, mois, prix_moy, pred_prix) %>%
+  slice_head(n = 10)
+```
+
+```{r prediction/mais/blanc}
+# Prédictions pour le maïs blanc
+newdata <- tibble(
+  produits = factor(c("MAIS BLANC", "MAIS BLANC", "MAIS BLANC"),
+                    levels = levels(prix_marche$produits)),
+  regions = factor(c("GRAND LOME", "PLATEAUX", "SAVANES"),
+                   levels = levels(prix_marche$regions)),
+  types_de_marches = factor(c("Consommation", "Production", "Consommation"),
+                            levels = levels(prix_marche$types_de_marches)),
+  mois = factor(c("Janvier", "Janvier", "Janvier"),
+                levels = levels(prix_marche$mois))
+)
+
+newdata <- newdata %>%
+  mutate(
+    pred_log = predict(modele_prix, newdata = newdata),
+    pred_prix = exp(pred_log)
+  )
+
+newdata
+```
+
+
+```{r erreur/prediction}
+library(Metrics)
+
+rmse_val <- rmse(prix_marche$prix_moy, prix_marche$pred_prix)
+mape_val <- mape(prix_marche$prix_moy, prix_marche$pred_prix)
+
+tibble(
+  indicateur = c("RMSE (FCFA/kg)", "MAPE"),
+  valeur = c(rmse_val, mape_val)
+)
+```
+
+Le modèle linéaire appliqué au logarithme des prix met en évidence des associations fortes entre le niveau de prix et le type de produit, ce qui est attendu compte tenu de la diversité des denrées (produits de base, céréales, tubercules, huiles, produits animaux, etc.). À produit donné, la région du Grand Lomé présente un niveau de prix significativement plus élevé que la région de référence, tandis que les marchés de production et de regroupement affichent des niveaux de prix significativement plus faibles que les marchés de consommation, ce qui traduit des marges commerciales plus importantes au stade du détail. Avec un R² ajusté d’environ 0,80, le modèle explique une part importante de la variabilité du logarithme des prix, mais les coefficients doivent être interprétés comme des associations descriptives et non comme des effets causaux. Les erreurs de prédiction restent modérées, avec un RMSE d’environ 470 FCFA/kg et un MAPE proche de 28%, ce qui rend le modèle utile pour résumer la structure des prix, mais insuffisant pour des prévisions opérationnelles fines.
+
+Afin de mieux comprendre le rôle des facteurs structurels indépendamment des différences entre produits, un second modèle a été estimé sans inclure la variable “produits”. Ce modèle permet d’évaluer les écarts de prix moyens entre régions et types de marchés, mais doit être interprété avec prudence, car il peut refléter en partie des effets de composition liés à la distribution des produits selon les zones.
+
+À titre d’exemple, pour le maïs blanc en janvier, le modèle prédit un prix moyen d’environ 200 FCFA/kg sur un marché de consommation du Grand Lomé, contre des niveaux légèrement plus bas dans les régions de l’intérieur et sur les marchés de production, ce qui illustre concrètement l’effet combiné de la localisation et du type de marché.
+
+## 8.2 Validation du modèle
+
+```{r validation/model}
+set.seed(123)
+
+index <- sample(1:nrow(prix_marche), 0.7 * nrow(prix_marche))
+
+train <- prix_marche[index, ]
+test  <- prix_marche[-index, ]
+
+modele <- lm(log(prix_moy) ~ produits + regions + types_de_marches + mois, data = train)
+
+pred_test <- exp(predict(modele, newdata = test))
+
+library(Metrics)
+rmse(test$prix_moy, pred_test)
+```
+
+La validation par séparation apprentissage/test montre une erreur de prédiction (RMSE) d’environ 460 FCFA/kg. Rapportée au niveau moyen des prix (environ 970 FCFA/kg), cette erreur reste relativement élevée, ce qui indique que le modèle capture les grandes tendances mais reste imprécis pour des prédictions individuelles. Cela s’explique notamment par la forte hétérogénéité des produits et la présence de valeurs extrêmes. Par ailleurs, cette validation repose sur une seule partition des données, ce qui limite la robustesse de l’évaluation ; des méthodes plus avancées comme la validation croisée pourraient permettre une estimation plus stable des performances du modèle.
+
+# 9. Conclusion
+
+L’analyse met en évidence une forte hétérogénéité des prix des denrées selon les produits, les régions et les types de marchés, avec des niveaux particulièrement élevés pour les produits d’origine animale et certains produits transformés, tandis que les céréales et tubercules de base restent relativement plus abordables. Les régions urbaines, en particulier le Grand Lomé, pratiquent en moyenne des prix supérieurs à ceux des régions de l’intérieur, et les marchés de consommation apparaissent systématiquement plus chers que les marchés de production, ce qui souligne l’importance des marges et des coûts de commercialisation dans la formation des prix au détail. Sur la période étudiée (novembre à mars 2026), les variations mensuelles de prix restent globalement modérées mais montrent des signaux de tension pour certains produits de base, en lien probable avec la saisonnalité des récoltes et des approvisionnements. Le modèle statistique exploratoire confirme ces grands contrastes structurels mais doit être considéré comme un outil descriptif ; des analyses complémentaires, couvrant l’ensemble de l’année et intégrant d’autres facteurs (coûts de transport, disponibilité, importations), seraient nécessaires pour affiner le diagnostic et orienter des interventions ciblées en matière de sécurité alimentaire.
