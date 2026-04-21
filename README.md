@@ -1,24 +1,24 @@
 <div align="center">
 # 🔍 Analyse Prix Denrées - Marchés Togolais 2026
 
-**20 948 prix DPSSE** (Nov25-Mar26) | R/tidyverse | Portfolio
+**20 948 prix DPSSE** (Nov25-Mar26) | R/tidyverse | Portfolio Masters Data France
 
 [![Rapport HTML](aperçu_du_report.png)](analyse_du_marché.html)
 </div>
 
 ## 📊 Métriques clés
-| Métrique | Valeur |
-|----------|--------|
-| **Observations** | 20 948 |
-| **Période** | Nov25-Mar26 |
-| **Médiane** | **600 FCFA/kg** |
-| **Max** | 13 072 FCFA/kg (Fonio-Lomé) |
+| Métrique      | Valeur              |
+| :------------ | :-----------------: |
+| Observations  | 20 948              |
+| Période       | Nov25-Mar26         |
+| Médiane       | **600 FCFA/kg**     |
+| Max           | 13 072 FCFA/kg      |
 
 ![Distribution](histo_prix.png)
 
 ## 🎯 Insights
-- **Grand Lomé** : +89% vs Savanes
-- **Arachide/Poulet** : σ > 500 FCFA/kg
+- **Grand Lomé** : +89% vs Savanes [web:9]
+- **Arachide/Poulet** : σ > 500 FCFA/kg [file:16]
 - **Sécurité alimentaire** : Protéines >1200 FCFA/kg
 
 ## 🛠️ Stack technique
@@ -36,5 +36,6 @@ prix_marche <- prix_marche2%>%
 [LinkedIn](https://linkedin.com/in/bihèbe-kagnira) | Masters Data France 2027
 
 <div align="center">
-[![License](https://img.shields.io/badge/License-CC_BY--NC--SA_4.0-blue)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
+[![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC_BY--NC--SA_4.0-blue)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
+Données DPSSE 2026
 </div>
