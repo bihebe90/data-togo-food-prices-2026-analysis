@@ -10,7 +10,7 @@
 | Métrique      | Valeur              |
 | :------------ | :-----------------: |
 | Observations  | 20 948              |
-| Période       | Nov25-Mar26         |
+| Période       | Nov 2025-Mar 2026         |
 | Médiane       | **600 FCFA/kg**     |
 | Max           | 13 072 FCFA/kg      |
 
