@@ -1,41 +1,33 @@
 <div align="center">
-# 🔍 Analyse Prix Denrées - Marchés Togolais 2026
+# Prix denrées - Togo 2026
 
-**20 948 prix DPSSE** (Nov25-Mar26) | R/tidyverse | Portfolio Masters Data France
+**20 948 prix DPSSE** (Nov25-Mar26) | R/tidyverse
 
-[![Rapport HTML](aperçu_du_report.png)](analyse_du_marché.html)
+[![Rapport](screenshots/report_preview.png)](prix_marche_analysis.html)
 </div>
 
-## 📊 Métriques clés
+## 📊 Données
 | Métrique | Valeur |
-|:---------|:------:|
+|----------|--------|
 | Observations | 20 948 |
-| Période | Nov25-Mar26 |
 | Médiane | **600 FCFA/kg** |
 | Max | 13 072 FCFA/kg |
 
-![Distribution](histo_prix.png)
+![Distribution](screenshots/histo_prix.png)
 
-## 🎯 Insights
-- **Grand Lomé** : +89% vs Savanes [web:9]
-- **Arachide/Poulet** : σ > 500 FCFA/kg [file:16]
-- **Sécurité alimentaire** : Protéines >1200 FCFA/kg
+## Résultats
+- **Grand Lomé** : +89% vs Savanes
+- **Arachide/Poulet** : σ > 500 FCFA/kg
 
-## 🛠️ Stack technique
+## Code
 ```r
-library(tidyverse); library(janitor)
+library(tidyverse)
 prix_marche <- prix_marche2%>% 
   group_by(marches, produits, mois) %>% 
   summarise(prix_moy = mean(prix_moy))
 ```
 
-## 🇬🇧 English Summary
-**20k+ food prices analysis** | Togo markets | tidyverse | Regional disparities +89%
+## 🇬🇧 English
+**20k food prices** | Togo markets | Data cleaning | ggplot2
 
-**KAGNIRA Bihèbè** - Data Analyst, Lomé, Togo  
-[LinkedIn](https://linkedin.com/in/bihèbe-kagnira) | Masters Data France 2027
-
-<div align="center">
-[![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC_BY--NC--SA_4.0-blue)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
-Données DPSSE 2026
-</div>
+**KAGNIRA Bihèbè** - Data Analyst Lomé
